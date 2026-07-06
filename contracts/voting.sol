@@ -7,44 +7,93 @@ pragma solidity ^0.8.24;
  * The owner can add candidates and authorize voters.
  */
 contract Voting {
-    /**
-     * @notice Represents a single candidate in the election.
-     * @dev Each candidate has a unique ID, a name, and a count of votes received.
-     */
     struct Candidate {
-        uint id;          // Unique identifier for the candidate, starting from 1.
-        string name;      // The candidate's name.
-        uint voteCount;   // The total number of votes this candidate has received.
+        uint id;
+        string name;
+        uint voteCount;
     }
 
-    /**
-     * @notice Represents a voter's status in the election.
-     * @dev Tracks whether a voter is authorized and if they have already voted.
-     */
     struct Voter {
-        bool authorized;  // True if the voter is whitelisted by the owner.
-        bool voted;       // True if the voter has already cast their ballot.
+        bool authorized;
+        bool voted;
     }
 
     address public owner;
-
-    /**
-     * @notice A mapping from a voter's address to their voter status.
-     * @dev This allows for efficient lookups to check if a user is authorized and has voted.
-     */
     mapping(address => Voter) public voters;
-
-    /**
-     * @notice A mapping from a candidate ID to the Candidate struct.
-     * @dev This allows for efficient retrieval of candidate data using their unique ID.
-     */
     mapping(uint => Candidate) public candidates;
-	
-    /**
-     * @notice The total number of candidates in the election.
-     * @dev Also used to generate unique IDs for new candidates.
-     */
     uint public candidatesCount;
+    
+    // FIXED: Moved 'indexed' after the data types
+    event Voted(address indexed voter, uint indexed candidateId);
 
-    // The contract's functions will be implemented here in the next tasks.
+    constructor() {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only the owner can call this function");
+        _;
+    }
+
+    /**
+     * @notice Adds a new candidate to the election.
+     * @dev Can only be called by the contract owner.
+     * @param _name The name of the new candidate.
+     */
+    function addCandidate(string memory _name) public onlyOwner {
+        candidatesCount++;
+        candidates[candidatesCount] = Candidate({
+            id: candidatesCount,
+            name: _name,
+            voteCount: 0
+        });
+    }
+
+    /**
+     * @notice Authorizes an address, granting them the right to vote.
+     * @dev Can only be called by the contract owner. This action is irreversible.
+     * @param _voterAddress The Ethereum address of the voter to authorize.
+     */
+    function authorizeVoter(address _voterAddress) public onlyOwner {
+        voters[_voterAddress].authorized = true;
+    }
+
+    /**
+     * @notice Allows an authorized voter to cast their vote for a specific candidate.
+     * @dev This function will contain checks to ensure a voter is authorized and has not
+     * already voted. It also validates the candidate ID.
+     * @param _candidateId The ID of the candidate to vote for.
+     */
+    function vote(uint _candidateId) public {
+        // Checkpoint 1: Is the voter authorized?
+        require(voters[msg.sender].authorized, "You are not authorized to vote.");
+
+        // Checkpoint 2: Has the voter already cast their ballot?
+        require(!voters[msg.sender].voted, "You have already cast your vote.");
+
+        // Checkpoint 3: Is the candidate ID valid?
+        require(_candidateId > 0 && _candidateId <= candidatesCount, "Invalid candidate ID.");
+
+        // --- Effects ---
+        candidates[_candidateId].voteCount++;
+        voters[msg.sender].voted = true;
+
+        // --- Interaction ---
+        emit Voted(msg.sender, _candidateId);
+    }
+
+    /**
+     * @notice Gets all candidates and their current vote counts.
+     * @dev This is a read-only view function that does not consume gas when called externally.
+     * @return A memory array of Candidate structs.
+     */
+    function getAllCandidates() public view returns (Candidate[] memory) {
+        Candidate[] memory allCandidates = new Candidate[](candidatesCount);
+
+        for (uint i = 1; i <= candidatesCount; i++) {
+            allCandidates[i - 1] = candidates[i];
+        }
+
+        return allCandidates;
+    }
 }
